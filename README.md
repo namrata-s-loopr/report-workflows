@@ -4,7 +4,7 @@ A GitHub Actions workflow that queries Grafana and emails a weekly HTML report w
 
 ## What is already implemented
 
-- `.github/workflows/weekly-monitor-report.yml` runs every Tuesday at **10:00 UTC** and can be run manually from the Actions page.
+- `.github/workflows/weekly-monitor-report.yml` runs every Tuesday at **10:00 IST** and can be run manually from the Actions page.
 - `scripts/send_weekly_report.ts` queries Grafana's documented `POST /api/ds/query` endpoint for the completed Tuesday-to-Tuesday week, converts Grafana table frames to HTML tables, and sends an HTML email.
 - `config/report.json` maps the three expected report tables to their Grafana queries and output columns.
 
@@ -46,13 +46,13 @@ If Grafana returns different field names, edit the `fields` keys (left-hand side
 
 ### 3. Set timezone and schedule
 
-GitHub Actions schedules are always UTC. The committed schedule is 10:00 UTC:
+GitHub Actions schedules are always UTC. The committed schedule is 10:00 IST (04:30 UTC):
 
 ```yaml
-- cron: "0 10 * * 2"
+- cron: "30 4 * * 2"
 ```
 
-Change it to the UTC equivalent of 10:00 in the required local timezone, including adjusting it for daylight-saving time if applicable. Set `REPORT_TIMEZONE` in the workflow to that IANA zone (for example `Asia/Kolkata` or `Europe/London`) so the Tuesday-to-Tuesday query window and subject date are correct.
+`REPORT_TIMEZONE` is set to `Asia/Kolkata`, so the Tuesday-to-Tuesday query window and subject date use IST.
 
 ## Testing
 

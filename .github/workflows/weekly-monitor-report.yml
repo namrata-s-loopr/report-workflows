@@ -2,8 +2,8 @@ name: Weekly monitor report
 
 on:
   schedule:
-    # GitHub Actions evaluates cron in UTC. Change this after choosing the report timezone.
-    - cron: "0 10 * * 2"
+    # GitHub Actions evaluates cron in UTC: 04:30 UTC is 10:00 IST.
+    - cron: "30 4 * * 2"
   workflow_dispatch:
 
 permissions:
@@ -15,7 +15,7 @@ jobs:
     timeout-minutes: 10
     env:
       # Controls report labels and the weekly date boundary; it does not affect cron.
-      REPORT_TIMEZONE: UTC
+      REPORT_TIMEZONE: Asia/Kolkata
       GRAFANA_URL: ${{ secrets.GRAFANA_URL }}
       GRAFANA_TOKEN: ${{ secrets.GRAFANA_TOKEN }}
       SMTP_HOST: ${{ secrets.SMTP_HOST }}
