@@ -1,5 +1,13 @@
 {
   "title": "Weekly report",
+  "emailApi": {
+    "payload": {
+      "to": "{{recipients}}",
+      "subject": "{{subject}}",
+      "html": "{{html}}",
+      "text": "{{text}}"
+    }
+  },
   "errorReport": {
     "minimumOccurrences": 10,
     "occurrenceField": "occurrences"

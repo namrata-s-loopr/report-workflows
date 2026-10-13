@@ -18,12 +18,8 @@
     "url": "https://github.com/namrata-s-loopr/report-workflows/issues"
   },
   "homepage": "https://github.com/namrata-s-loopr/report-workflows#readme",
-  "dependencies": {
-    "nodemailer": "^10.1.0"
-  },
   "devDependencies": {
     "@types/node": "^26.6.5",
-    "@types/nodemailer": "^8.0.2",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   }

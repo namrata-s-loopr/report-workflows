@@ -1,11 +1,11 @@
 # Weekly monitor report
 
-A GitHub Actions workflow that queries Grafana and emails a weekly HTML report with tenant status, instance CPU/disk utilisation, and unique errors.
+A GitHub Actions workflow that queries Grafana and sends a weekly HTML report through an email API, with tenant status, instance CPU/disk utilisation, and unique errors.
 
 ## What is already implemented
 
 - `.github/workflows/weekly-monitor-report.yml` runs every Tuesday at **10:00 IST** and can be run manually from the Actions page.
-- `scripts/send_weekly_report.ts` queries Grafana's documented `POST /api/ds/query` endpoint for the completed Tuesday-to-Tuesday week, converts Grafana table frames to HTML tables, and sends an HTML email.
+- `scripts/send_weekly_report.ts` queries Grafana's documented `POST /api/ds/query` endpoint for the completed Tuesday-to-Tuesday week, converts Grafana table frames to HTML tables, and sends them to the configured email API.
 - `config/report.json` maps the three expected report tables to their Grafana queries and output columns.
 
 > The supplied `http://monitor.on.loopr.ai/dashboard/36` URL identifies itself as **Uptime Kuma**, rather than Grafana. This workflow queries Grafana directly, as requested. The actual Grafana URL and the three panel queries still need to be supplied.
@@ -20,17 +20,27 @@ In **Settings → Secrets and variables → Actions**, add:
 |---|---|
 | `GRAFANA_URL` | Grafana base URL, e.g. `https://grafana.example.com` |
 | `GRAFANA_TOKEN` | Read-only Grafana service-account token with access to the required data sources |
-| `SMTP_HOST` | SMTP host |
-| `SMTP_PORT` | `587` for STARTTLS or `465` for implicit TLS |
-| `SMTP_USE_SSL` | `false` for port 587; `true` for port 465 |
-| `SMTP_USERNAME` | SMTP username |
-| `SMTP_PASSWORD` | SMTP password or app password |
-| `SMTP_FROM` | Sender address |
+| `EMAIL_API_URL` | Complete API endpoint URL, including any secret embedded in the URL |
 | `REPORT_RECIPIENTS` | Recipient address(es), comma-separated |
 
-For Microsoft 365, use an approved SMTP relay or an app/password mechanism permitted by your organisation. Do not commit these values to the repository.
+Do not commit the API URL to the repository. These secrets are read from the `Production` GitHub Environment.
 
-### 2. Copy the Grafana queries into `config/report.json`
+### 2. Configure the email API payload and Grafana queries
+
+The workflow sends `POST` JSON to `EMAIL_API_URL`. Its default payload is:
+
+```json
+{
+  "to": "{{recipients}}",
+  "subject": "{{subject}}",
+  "html": "{{html}}",
+  "text": "{{text}}"
+}
+```
+
+If the API uses different names or nesting, edit `emailApi.payload` in `config/report.json`. The placeholders are replaced just before the request; do not add secrets to this file.
+
+### 3. Copy the Grafana queries into `config/report.json`
 
 Each entry must be a valid Grafana `/api/ds/query` query object. Replace the placeholder datasource UIDs and `expr` values with the query configuration from the corresponding Grafana panel. Preserve the `refId`, `datasource`, and query-type-specific fields required by its data source.
 
@@ -44,7 +54,7 @@ The errors query receives the same completed seven-day range as the rest of the 
 
 If Grafana returns different field names, edit the `fields` keys (left-hand side) in `config/report.json`; the displayed headings are on the right-hand side.
 
-### 3. Set timezone and schedule
+### 4. Set timezone and schedule
 
 GitHub Actions schedules are always UTC. The committed schedule is 10:00 IST (04:30 UTC):
 
@@ -56,6 +66,6 @@ GitHub Actions schedules are always UTC. The committed schedule is 10:00 IST (04
 
 ## Testing
 
-Use **Actions → Weekly monitor report → Run workflow** after adding secrets and configuring queries. Set `REPORT_RECIPIENTS` to `namrata.shirdhankar@loopr.ai` in GitHub Secrets. GitHub will never print secret values. A query or SMTP failure fails the workflow, which makes the delivery problem visible in the Actions run.
+Use **Actions → Weekly monitor report → Run workflow** after adding secrets and configuring queries. Set `REPORT_RECIPIENTS` to `namrata.shirdhankar@loopr.ai` in the `Production` environment secrets. GitHub will never print secret values. A query or email-API failure fails the workflow, which makes the delivery problem visible in the Actions run.
 
 The workflow uses GitHub-hosted runners. If Grafana or SMTP is reachable only on Loopr's private network, change `runs-on: ubuntu-latest` to the label of a secured self-hosted runner with access to both services.

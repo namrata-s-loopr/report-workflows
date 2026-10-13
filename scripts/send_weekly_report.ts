@@ -1,6 +1,5 @@
 import { readFile, writeFile } from "node:fs/promises";
 import process from "node:process";
-import nodemailer from "nodemailer";
 
 type Row = Record<string, unknown>;
 type Query = Record<string, unknown> & { refId: string; fields: Record<string, string> };
@@ -8,11 +7,11 @@ type Config = {
   title?: string;
   queries: Record<"tenant_checks" | "instances" | "errors", Query>;
   errorReport?: { minimumOccurrences?: number; occurrenceField?: string };
+  emailApi?: { payload?: unknown };
 };
 
 const requiredEnvironment = [
-  "GRAFANA_URL", "GRAFANA_TOKEN", "SMTP_HOST", "SMTP_PORT", "SMTP_USERNAME",
-  "SMTP_PASSWORD", "SMTP_FROM", "REPORT_RECIPIENTS",
+  "GRAFANA_URL", "GRAFANA_TOKEN", "EMAIL_API_URL", "REPORT_RECIPIENTS",
 ] as const;
 
 function environment(): Record<(typeof requiredEnvironment)[number], string> {
@@ -113,6 +112,18 @@ function buildEmail(config: Config, datasets: Record<string, Row[]>, label: stri
   };
 }
 
+function interpolatePayload(value: unknown, variables: Record<string, string>): unknown {
+  if (typeof value === "string") return value.replace(/{{(recipients|subject|html|text)}}/g, (_, key: string) => variables[key]);
+  if (Array.isArray(value)) return value.map((item) => interpolatePayload(item, variables));
+  if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, interpolatePayload(item, variables)]));
+  return value;
+}
+
+async function sendWithEmailApi(apiUrl: string, payload: unknown): Promise<void> {
+  const response = await fetch(apiUrl, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+  if (!response.ok) throw new Error(`Email API failed: HTTP ${response.status}: ${(await response.text()).slice(0, 500)}`);
+}
+
 async function main(): Promise<void> {
   const configPath = process.argv[2] ?? "config/report.json";
   const dryRun = process.argv.includes("--dry-run");
@@ -126,8 +137,8 @@ async function main(): Promise<void> {
   if (minimumOccurrences !== undefined) datasets.errors = datasets.errors.filter((row) => Number(value(row, occurrenceField)) >= minimumOccurrences);
   const email = buildEmail(config, datasets, label);
   if (dryRun) return void await writeFile("weekly-report-preview.html", email.html);
-  const transport = nodemailer.createTransport({ host: env.SMTP_HOST, port: Number(env.SMTP_PORT), secure: process.env.SMTP_USE_SSL === "true", auth: { user: env.SMTP_USERNAME, pass: env.SMTP_PASSWORD }, requireTLS: process.env.SMTP_USE_SSL !== "true" });
-  await transport.sendMail({ from: env.SMTP_FROM, to: env.REPORT_RECIPIENTS, subject: email.subject, text: email.text, html: email.html });
+  const payloadTemplate = config.emailApi?.payload ?? { to: "{{recipients}}", subject: "{{subject}}", html: "{{html}}", text: "{{text}}" };
+  await sendWithEmailApi(env.EMAIL_API_URL, interpolatePayload(payloadTemplate, { recipients: env.REPORT_RECIPIENTS, subject: email.subject, html: email.html, text: email.text }));
   console.log(`Sent ${JSON.stringify(email.subject)} to ${env.REPORT_RECIPIENTS}`);
 }
 
