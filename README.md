@@ -6,7 +6,7 @@ TypeScript GitHub Actions workflow scheduled for **Tuesday, 10:00 AM IST** (`30 
 
 - **CPU and disk implemented and live-tested:** `grafanacloud-prom`, discovered using the existing Codex Grafana MCP configuration. CPU is current five-minute utilisation (non-idle time); disk is current root-filesystem usage. These are snapshots, not weekly averages. Missing metrics display `N/A`, never `OK`.
 - **Errors implemented and live-tested:** `grafanacloud-logs`, application Docker logs labelled `level="ERROR"`. Loki counts all matching structured JSON messages over the rolling last seven days—not a limited sample of log lines. Exact message/error-code pairs are combined across instances, filtered to at least 10 occurrences, and sorted by descending total count. This scope excludes WARN, unstructured logs and messages without a JSON `message` field.
-- **Tenant checks pending:** `http://monitor.on.loopr.ai/dashboard/36` is an authenticated Uptime Kuma dashboard, not Grafana or a public Kuma status page. Authenticated access and tenant-to-monitor mapping are needed. The tenant placeholder is intentionally guarded: the script fails with a clear message rather than inventing healthy tenant status or querying a nonexistent Grafana datasource.
+- **Tenant monitor status implemented and live-tested:** the Kuma Socket.IO feed at `http://monitor.on.loopr.ai` currently exposes monitor data without login. The six screenshot tenants map to production groups in `config/report.json`. The report includes current status and Kuma's supplied 24-hour uptime; paused groups are explicitly marked Paused. Sanity checks are **Not collected**; this feed does not establish manual sanity results or ELK health. If authentication is enabled in future, this adapter will fail rather than invent status.
 - **Email API contract unverified:** configurable JSON body is available, but the endpoint's actual field names and success response still need confirmation. No successful email delivery has been verified.
 
 ## Production environment secrets
@@ -44,7 +44,7 @@ Change the field names/nesting to match the actual API. These placeholders are s
 - `instances.source = prometheus-instances`: joins `cpuExpr` and `diskExpr` instant-query vectors on the instance label.
 - `errors.source = loki-errors`: evaluates a seven-day count aggregation and combines counts across instances. `errorReport.minimumOccurrences` controls the minimum combined count (default 10).
 
-Output headings are configured under each section's `fields`. The tenant section is still pending Kuma integration; do not replace it with fake `OK` rows.
+Output headings are configured under each section's `fields`. The tenant section uses `source = uptime-kuma` and explicit production-monitor IDs; sanity results remain Not collected until a genuine source is added.
 
 ## Testing and running
 
@@ -56,6 +56,6 @@ npm run send-report
 
 `npm test` type-checks and tests the instance joining and error aggregation. `npm run send-report -- config/report.json --dry-run` writes local HTML without sending mail, but still requires the current secret variables and complete source configuration.
 
-After finishing the tenant integration and validating the API contract, use **Actions → Weekly monitor report → Run workflow**. Ensure that Production environment protection rules permit scheduled execution without manual approval if unattended delivery is required.
+Use **Actions → Weekly monitor report → Run workflow** to test data collection and the email API contract. Ensure that Production environment protection rules permit scheduled execution without manual approval if unattended delivery is required.
 
 GitHub-hosted runners must reach Grafana, Kuma and the email API. Use a secured self-hosted runner if any endpoint is private. Scheduled GitHub Actions may be delayed; the cron expresses the intended start time, not guaranteed exact delivery.

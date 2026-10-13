@@ -1,9 +1,10 @@
 import { readFile, writeFile } from "node:fs/promises";
 import process from "node:process";
 import { collectGrafanaSource, type SourceQuery } from "./grafana_sources.js";
+import { collectKuma, type TenantMonitor } from "./kuma_source.js";
 
 type Row = Record<string, unknown>;
-type Query = Record<string, unknown> & SourceQuery & { refId: string; fields: Record<string, string> };
+type Query = Record<string, unknown> & SourceQuery & { refId: string; fields: Record<string, string>; baseUrl?: string; monitors?: TenantMonitor[] };
 type Config = {
   title?: string;
   queries: Record<"tenant_checks" | "instances" | "errors", Query>;
@@ -138,14 +139,13 @@ async function main(): Promise<void> {
   if (!["tenant_checks", "instances", "errors"].every((key) => config.queries[key as keyof Config["queries"]])) throw new Error("Config must define tenant_checks, instances, and errors queries");
   const env = environment();
   const { start, end, label } = reportWindow(process.env.REPORT_TIMEZONE ?? "UTC");
-  if (config.queries.tenant_checks.source === "uptime-kuma") {
-    throw new Error("Tenant checks need authenticated Uptime Kuma access and a tenant-to-monitor mapping for monitor.on.loopr.ai/dashboard/36; Kuma integration is not configured yet");
-  }
   const now = new Date();
   const datasets = Object.fromEntries(await Promise.all(Object.entries(config.queries).map(async ([key, query]) => [key,
-    query.source
-      ? await collectGrafanaSource(env.GRAFANA_URL, env.GRAFANA_TOKEN, query, now, config.errorReport?.minimumOccurrences ?? 10)
-      : await grafanaQuery(env.GRAFANA_URL, env.GRAFANA_TOKEN, query, start, end),
+    query.source === "uptime-kuma"
+      ? await collectKuma(query.baseUrl ?? "http://monitor.on.loopr.ai", query.monitors ?? [])
+      : query.source
+        ? await collectGrafanaSource(env.GRAFANA_URL, env.GRAFANA_TOKEN, query, now, config.errorReport?.minimumOccurrences ?? 10)
+        : await grafanaQuery(env.GRAFANA_URL, env.GRAFANA_TOKEN, query, start, end),
   ]))) as Record<string, Row[]>;
   const minimumOccurrences = config.errorReport?.minimumOccurrences;
   const occurrenceField = config.errorReport?.occurrenceField ?? "occurrences";

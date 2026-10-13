@@ -16,11 +16,19 @@
     "tenant_checks": {
       "refId": "A",
       "source": "uptime-kuma",
-      "dashboardUrl": "http://monitor.on.loopr.ai/dashboard/36",
+      "baseUrl": "http://monitor.on.loopr.ai",
+      "monitors": [
+        { "tenant": "DTNA", "monitorId": 19 },
+        { "tenant": "Safran", "monitorId": 56 },
+        { "tenant": "MSIH Demo", "monitorId": 85 },
+        { "tenant": "US Demo", "monitorId": 97 },
+        { "tenant": "Cascade", "monitorId": 36 },
+        { "tenant": "GAF", "monitorId": 64 }
+      ],
       "fields": {
         "tenant": "Tenant Name",
         "sanity_check": "Sanity Check",
-        "kuma_and_elk": "Kuma and ELK"
+        "kuma_and_elk": "Kuma status / uptime (24h)"
       }
     },
     "instances": {
