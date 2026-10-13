@@ -1,0 +1,39 @@
+name: Weekly monitor report
+
+on:
+  schedule:
+    # GitHub Actions evaluates cron in UTC. Change this after choosing the report timezone.
+    - cron: "0 10 * * 2"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  send-report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      # Controls report labels and the weekly date boundary; it does not affect cron.
+      REPORT_TIMEZONE: UTC
+      GRAFANA_URL: ${{ secrets.GRAFANA_URL }}
+      GRAFANA_TOKEN: ${{ secrets.GRAFANA_TOKEN }}
+      SMTP_HOST: ${{ secrets.SMTP_HOST }}
+      SMTP_PORT: ${{ secrets.SMTP_PORT }}
+      SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
+      SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+      # true for implicit TLS/port 465; false for STARTTLS/port 587.
+      SMTP_USE_SSL: ${{ secrets.SMTP_USE_SSL }}
+      SMTP_FROM: ${{ secrets.SMTP_FROM }}
+      REPORT_RECIPIENTS: ${{ secrets.REPORT_RECIPIENTS }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Generate and send weekly report
+        run: |
+          npm ci
+          npm run send-report

@@ -1,0 +1,42 @@
+{
+  "title": "Weekly report",
+  "errorReport": {
+    "minimumOccurrences": 10,
+    "occurrenceField": "occurrences"
+  },
+  "queries": {
+    "tenant_checks": {
+      "refId": "A",
+      "datasource": { "uid": "REPLACE_WITH_GRAFANA_DATASOURCE_UID" },
+      "format": "table",
+      "expr": "REPLACE_WITH_THE_TENANT_CHECK_QUERY",
+      "fields": {
+        "tenant": "Tenant Name",
+        "sanity_check": "Sanity Check",
+        "kuma_and_elk": "Kuma and ELK"
+      }
+    },
+    "instances": {
+      "refId": "B",
+      "datasource": { "uid": "REPLACE_WITH_GRAFANA_DATASOURCE_UID" },
+      "format": "table",
+      "expr": "REPLACE_WITH_THE_INSTANCE_CPU_DISK_QUERY",
+      "fields": {
+        "instance": "Instance",
+        "cpu": "CPU %",
+        "disk": "Disk %"
+      }
+    },
+    "errors": {
+      "refId": "C",
+      "datasource": { "uid": "REPLACE_WITH_GRAFANA_DATASOURCE_UID" },
+      "format": "table",
+      "expr": "REPLACE_WITH_THE_UNIQUE_ERROR_QUERY",
+      "fields": {
+        "unique_error": "Unique error",
+        "instances": "Instances",
+        "occurrences": "Occurrences"
+      }
+    }
+  }
+}
