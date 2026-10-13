@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "send-report": "tsx scripts/send_weekly_report.ts",
-    "test": "tsc --noEmit"
+    "test": "tsc --noEmit && tsx --test scripts/*.test.ts"
   },
   "repository": {
     "type": "git",

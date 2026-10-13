@@ -1,33 +1,30 @@
 # Weekly monitor report
 
-A GitHub Actions workflow that queries Grafana and sends a weekly HTML report through an email API, with tenant status, instance CPU/disk utilisation, and unique errors.
+TypeScript GitHub Actions workflow scheduled for **Tuesday, 10:00 AM IST** (`30 4 * * 2` UTC), using the `Production` GitHub Environment. It sends HTML through an email API, not SMTP.
 
-## What is already implemented
+## Current status
 
-- `.github/workflows/weekly-monitor-report.yml` runs every Tuesday at **10:00 IST** and can be run manually from the Actions page.
-- `scripts/send_weekly_report.ts` queries Grafana's documented `POST /api/ds/query` endpoint for the completed Tuesday-to-Tuesday week, converts Grafana table frames to HTML tables, and sends them to the configured email API.
-- `config/report.json` maps the three expected report tables to their Grafana queries and output columns.
+- **CPU and disk implemented and live-tested:** `grafanacloud-prom`, discovered using the existing Codex Grafana MCP configuration. CPU is current five-minute utilisation (non-idle time); disk is current root-filesystem usage. These are snapshots, not weekly averages. Missing metrics display `N/A`, never `OK`.
+- **Errors implemented and live-tested:** `grafanacloud-logs`, application Docker logs labelled `level="ERROR"`. Loki counts all matching structured JSON messages over the rolling last seven days—not a limited sample of log lines. Exact message/error-code pairs are combined across instances, filtered to at least 10 occurrences, and sorted by descending total count. This scope excludes WARN, unstructured logs and messages without a JSON `message` field.
+- **Tenant checks pending:** `http://monitor.on.loopr.ai/dashboard/36` is an authenticated Uptime Kuma dashboard, not Grafana or a public Kuma status page. Authenticated access and tenant-to-monitor mapping are needed. The tenant placeholder is intentionally guarded: the script fails with a clear message rather than inventing healthy tenant status or querying a nonexistent Grafana datasource.
+- **Email API contract unverified:** configurable JSON body is available, but the endpoint's actual field names and success response still need confirmation. No successful email delivery has been verified.
 
-> The supplied `http://monitor.on.loopr.ai/dashboard/36` URL identifies itself as **Uptime Kuma**, rather than Grafana. This workflow queries Grafana directly, as requested. The actual Grafana URL and the three panel queries still need to be supplied.
+## Production environment secrets
 
-## One-time configuration
-
-### 1. Add GitHub Actions secrets
-
-In **Settings → Secrets and variables → Actions**, add:
+Configure these in **Settings → Environments → Production → Environment secrets**:
 
 | Secret | Value |
 |---|---|
-| `GRAFANA_URL` | Grafana base URL, e.g. `https://grafana.example.com` |
-| `GRAFANA_TOKEN` | Read-only Grafana service-account token with access to the required data sources |
-| `EMAIL_API_URL` | Complete API endpoint URL, including any secret embedded in the URL |
+| `GRAFANA_URL` | Grafana base URL (`https://loopr.grafana.net`) |
+| `GRAFANA_TOKEN` | Read-only service-account token with metrics/logs query permissions |
+| `EMAIL_API_URL` | Complete email API endpoint including any secret embedded in the URL |
 | `REPORT_RECIPIENTS` | Recipient address(es), comma-separated |
 
-Do not commit the API URL to the repository. These secrets are read from the `Production` GitHub Environment.
+Keep secrets out of source files. `EMAIL_API_URL` is never intentionally printed, nor are its response body or fetch exception details, since they could contain the secret URL.
 
-### 2. Configure the email API payload and Grafana queries
+## Email API body
 
-The workflow sends `POST` JSON to `EMAIL_API_URL`. Its default payload is:
+`config/report.json` contains `emailApi.payload`. The default request is a JSON `POST`:
 
 ```json
 {
@@ -38,34 +35,27 @@ The workflow sends `POST` JSON to `EMAIL_API_URL`. Its default payload is:
 }
 ```
 
-If the API uses different names or nesting, edit `emailApi.payload` in `config/report.json`. The placeholders are replaced just before the request; do not add secrets to this file.
+Change the field names/nesting to match the actual API. These placeholders are substituted recursively at runtime. A non-2xx HTTP response fails the run; a 2xx only indicates that the API accepted the request, not that delivery was confirmed.
 
-### 3. Copy the Grafana queries into `config/report.json`
+## Grafana configuration
 
-Each entry must be a valid Grafana `/api/ds/query` query object. Replace the placeholder datasource UIDs and `expr` values with the query configuration from the corresponding Grafana panel. Preserve the `refId`, `datasource`, and query-type-specific fields required by its data source.
+`config/report.json` defines two source adapters:
 
-The response must be formatted as a Grafana **table** and have the configured field names:
+- `instances.source = prometheus-instances`: joins `cpuExpr` and `diskExpr` instant-query vectors on the instance label.
+- `errors.source = loki-errors`: evaluates a seven-day count aggregation and combines counts across instances. `errorReport.minimumOccurrences` controls the minimum combined count (default 10).
 
-- `tenant_checks`: `tenant`, `sanity_check`, `kuma_and_elk`
-- `instances`: `instance`, `cpu`, `disk`
-- `errors`: `unique_error`, `instances`, `occurrences`
+Output headings are configured under each section's `fields`. The tenant section is still pending Kuma integration; do not replace it with fake `OK` rows.
 
-The errors query receives the same completed seven-day range as the rest of the report. The workflow filters it to errors whose `occurrences` value is at least `errorReport.minimumOccurrences` (currently `10`), then includes the count in the email. Change those two settings in `config/report.json` if the field name or high-occurrence threshold differs.
+## Testing and running
 
-If Grafana returns different field names, edit the `fields` keys (left-hand side) in `config/report.json`; the displayed headings are on the right-hand side.
-
-### 4. Set timezone and schedule
-
-GitHub Actions schedules are always UTC. The committed schedule is 10:00 IST (04:30 UTC):
-
-```yaml
-- cron: "30 4 * * 2"
+```sh
+npm ci
+npm test
+npm run send-report
 ```
 
-`REPORT_TIMEZONE` is set to `Asia/Kolkata`, so the Tuesday-to-Tuesday query window and subject date use IST.
+`npm test` type-checks and tests the instance joining and error aggregation. `npm run send-report -- config/report.json --dry-run` writes local HTML without sending mail, but still requires the current secret variables and complete source configuration.
 
-## Testing
+After finishing the tenant integration and validating the API contract, use **Actions → Weekly monitor report → Run workflow**. Ensure that Production environment protection rules permit scheduled execution without manual approval if unattended delivery is required.
 
-Use **Actions → Weekly monitor report → Run workflow** after adding secrets and configuring queries. Set `REPORT_RECIPIENTS` to `namrata.shirdhankar@loopr.ai` in the `Production` environment secrets. GitHub will never print secret values. A query or email-API failure fails the workflow, which makes the delivery problem visible in the Actions run.
-
-The workflow uses GitHub-hosted runners. If Grafana or SMTP is reachable only on Loopr's private network, change `runs-on: ubuntu-latest` to the label of a secured self-hosted runner with access to both services.
+GitHub-hosted runners must reach Grafana, Kuma and the email API. Use a secured self-hosted runner if any endpoint is private. Scheduled GitHub Actions may be delayed; the cron expresses the intended start time, not guaranteed exact delivery.

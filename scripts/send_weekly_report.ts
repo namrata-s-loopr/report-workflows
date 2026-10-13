@@ -1,8 +1,9 @@
 import { readFile, writeFile } from "node:fs/promises";
 import process from "node:process";
+import { collectGrafanaSource, type SourceQuery } from "./grafana_sources.js";
 
 type Row = Record<string, unknown>;
-type Query = Record<string, unknown> & { refId: string; fields: Record<string, string> };
+type Query = Record<string, unknown> & SourceQuery & { refId: string; fields: Record<string, string> };
 type Config = {
   title?: string;
   queries: Record<"tenant_checks" | "instances" | "errors", Query>;
@@ -120,8 +121,14 @@ function interpolatePayload(value: unknown, variables: Record<string, string>): 
 }
 
 async function sendWithEmailApi(apiUrl: string, payload: unknown): Promise<void> {
-  const response = await fetch(apiUrl, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-  if (!response.ok) throw new Error(`Email API failed: HTTP ${response.status}: ${(await response.text()).slice(0, 500)}`);
+  let response: Response;
+  try {
+    response = await fetch(apiUrl, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload), signal: AbortSignal.timeout(30_000), redirect: "error" });
+  } catch {
+    // Do not log fetch errors: they may include the secret-bearing endpoint URL.
+    throw new Error("Email API request failed; check endpoint and network access");
+  }
+  if (!response.ok) throw new Error(`Email API failed: HTTP ${response.status}`);
 }
 
 async function main(): Promise<void> {
@@ -131,7 +138,15 @@ async function main(): Promise<void> {
   if (!["tenant_checks", "instances", "errors"].every((key) => config.queries[key as keyof Config["queries"]])) throw new Error("Config must define tenant_checks, instances, and errors queries");
   const env = environment();
   const { start, end, label } = reportWindow(process.env.REPORT_TIMEZONE ?? "UTC");
-  const datasets = Object.fromEntries(await Promise.all(Object.entries(config.queries).map(async ([key, query]) => [key, await grafanaQuery(env.GRAFANA_URL, env.GRAFANA_TOKEN, query, start, end)]))) as Record<string, Row[]>;
+  if (config.queries.tenant_checks.source === "uptime-kuma") {
+    throw new Error("Tenant checks need authenticated Uptime Kuma access and a tenant-to-monitor mapping for monitor.on.loopr.ai/dashboard/36; Kuma integration is not configured yet");
+  }
+  const now = new Date();
+  const datasets = Object.fromEntries(await Promise.all(Object.entries(config.queries).map(async ([key, query]) => [key,
+    query.source
+      ? await collectGrafanaSource(env.GRAFANA_URL, env.GRAFANA_TOKEN, query, now, config.errorReport?.minimumOccurrences ?? 10)
+      : await grafanaQuery(env.GRAFANA_URL, env.GRAFANA_TOKEN, query, start, end),
+  ]))) as Record<string, Row[]>;
   const minimumOccurrences = config.errorReport?.minimumOccurrences;
   const occurrenceField = config.errorReport?.occurrenceField ?? "occurrences";
   if (minimumOccurrences !== undefined) datasets.errors = datasets.errors.filter((row) => Number(value(row, occurrenceField)) >= minimumOccurrences);

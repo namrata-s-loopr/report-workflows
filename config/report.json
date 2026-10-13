@@ -15,9 +15,8 @@
   "queries": {
     "tenant_checks": {
       "refId": "A",
-      "datasource": { "uid": "REPLACE_WITH_GRAFANA_DATASOURCE_UID" },
-      "format": "table",
-      "expr": "REPLACE_WITH_THE_TENANT_CHECK_QUERY",
+      "source": "uptime-kuma",
+      "dashboardUrl": "http://monitor.on.loopr.ai/dashboard/36",
       "fields": {
         "tenant": "Tenant Name",
         "sanity_check": "Sanity Check",
@@ -26,9 +25,10 @@
     },
     "instances": {
       "refId": "B",
-      "datasource": { "uid": "REPLACE_WITH_GRAFANA_DATASOURCE_UID" },
-      "format": "table",
-      "expr": "REPLACE_WITH_THE_INSTANCE_CPU_DISK_QUERY",
+      "source": "prometheus-instances",
+      "datasource": { "uid": "grafanacloud-prom" },
+      "cpuExpr": "100 * (1 - avg by (instance) (rate(node_cpu_seconds_total{job=\"integrations/node_exporter\",mode=\"idle\"}[5m])))",
+      "diskExpr": "max by (instance) (100 * (1 - node_filesystem_avail_bytes{job=\"integrations/node_exporter\",mountpoint=\"/\"} / node_filesystem_size_bytes{job=\"integrations/node_exporter\",mountpoint=\"/\"}))",
       "fields": {
         "instance": "Instance",
         "cpu": "CPU %",
@@ -37,9 +37,9 @@
     },
     "errors": {
       "refId": "C",
-      "datasource": { "uid": "REPLACE_WITH_GRAFANA_DATASOURCE_UID" },
-      "format": "table",
-      "expr": "REPLACE_WITH_THE_UNIQUE_ERROR_QUERY",
+      "source": "loki-errors",
+      "datasource": { "uid": "grafanacloud-logs" },
+      "expr": "sum by (instance, error_message, error_code) (count_over_time({job=\"integrations/docker\",level=\"ERROR\"} | json error_message=\"message\", error_code=\"error.code\" | __error__=\"\" | error_message!=\"\" [7d]))",
       "fields": {
         "unique_error": "Unique error",
         "instances": "Instances",
